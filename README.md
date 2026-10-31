@@ -10,6 +10,7 @@ Small tweaks for the [Dia](https://www.diabrowser.com) browser, kept in place wh
 - Hide Chat button
 - Hide Chats button
 - Hide recent tabs button
+- Peek on Shift-click: preview a link over the current page, like Arc
 
 Right-click a tab and choose **Group Tabs by Domain**, at the end of the group commands after **Move to Window**. The same command is in the menu bar, in the Tab menu if Dia has one, otherwise in the menu that holds the tab commands.
 

@@ -1,9 +1,10 @@
 #import "HideToolbar.h"
+#import "Patches/Peek/Peek.h"
 
 // The bar stays in Dia's layout: hiding it makes Dia reflow in ways it won't undo.
 static NSView *DPToolbar_hitTest(NSView *self, SEL _cmd, NSPoint point) {
     DPToolbarHover *hover = [DPToolbarHover forPane:self.superview];
-    BOOL hidden = DPHideToolbar.on && hover.progress == 0 && (self == hover.bar || self == hover.bookmarks);
+    BOOL hidden = ((DPHideToolbar.on && hover.progress == 0) || DPInPeek(self)) && (self == hover.bar || self == hover.bookmarks);
     return hidden ? nil : DPCallOriginal(DPToolbar_hitTest, self, point);
 }
 

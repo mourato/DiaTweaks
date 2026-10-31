@@ -1,4 +1,5 @@
 #import "HideToolbar.h"
+#import "Patches/Peek/Peek.h"
 
 NSHashTable<NSView *> *DPPanes;
 static char DPFrameKey, DPFillsKey;
@@ -33,11 +34,19 @@ void DPApplyToolbar(NSView *pane) {
     [hover updateForBar:bar bookmarks:bookmarks];
 
     CGFloat progress = DPHideToolbar.progress;
-    for (NSView *view in bars) view.alphaValue = 1 - progress * (1 - hover.progress);
+    // In a Peek the bars are invisible and the page moves up until the Peek's header is all that's above it.
+    BOOL peek = DPInPeek(pane);
+    if (peek) {
+        NSView *last = bars.lastObject;
+        CGFloat above = NSHeight(pane.window.frame) - NSMinY([last convertRect:last.bounds toView:nil]);
+        CGFloat height = DPBottom(pane, last.frame) - DPTop(pane, bar.frame);
+        progress = MIN(1, MAX(0, (above - DPPeekHeaderHeight) / MAX(height, 1)));
+    }
+    for (NSView *view in bars) view.alphaValue = peek ? 0 : 1 - progress * (1 - hover.progress);
     NSIndexSet *slots = [pane.subviews indexesOfObjectsPassingTest:^BOOL(NSView *sub, NSUInteger i, BOOL *stop) { return [bars containsObject:sub]; }];
     BOOL onTop = slots.firstIndex == pane.subviews.count - bars.count, atBottom = slots.lastIndex == bars.count - 1;
     // Revealed on hover, the bars float over the page instead of pushing it down.
-    if (hover.revealed || hover.progress > 0) {
+    if (!peek && (hover.revealed || hover.progress > 0)) {
         if (!onTop) for (NSView *view in bars) [pane addSubview:view positioned:NSWindowAbove relativeTo:nil];
     } else if (progress > 0 && !atBottom) {
         for (NSView *view in bars.reverseObjectEnumerator) [pane addSubview:view positioned:NSWindowBelow relativeTo:nil];
