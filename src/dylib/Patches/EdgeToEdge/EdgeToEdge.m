@@ -1,4 +1,5 @@
 #import "EdgeToEdge.h"
+#import "Patches/Peek/Peek.h"
 
 const CGFloat DPWindowPadding = 6;
 NSHashTable<NSView *> *DPContainers;
@@ -15,9 +16,14 @@ static NSEdgeInsets DPGaps(NSView *superview, NSRect frame) {
     return NSEdgeInsetsMake(superview.isFlipped ? low : high, NSMinX(frame) - NSMinX(bounds), superview.isFlipped ? high : low, NSMaxX(bounds) - NSMaxX(frame));
 }
 
+// How far the page has grown over the padding: a Peek is always edge to edge, so its card is just the page.
+static CGFloat DPEdgeToEdgeProgress(NSView *view) {
+    return DPInPeek(view) ? 1 : DPEdgeToEdge.progress;
+}
+
 // Grows the page over each side where Dia left the window padding, by `progress` of it.
 static NSRect DPEdgeToEdgeFrame(NSView *view, NSRect frame) {
-    CGFloat inset = DPEdgeToEdge.progress * DPWindowPadding;
+    CGFloat inset = DPEdgeToEdgeProgress(view) * DPWindowPadding;
     NSView *superview = view.superview;
     if (inset == 0 || !superview || DPChatCard(view)) return frame;
     NSEdgeInsets gaps = DPGaps(superview, frame);
@@ -55,7 +61,7 @@ static void DPContainer_setFrame(NSView *self, SEL _cmd, NSRect frame) {
     DPSet(self, &DPRequestedFrameKey, @(frame));
     [DPContainers addObject:self];
     NSRect adjusted = DPEdgeToEdgeFrame(self, frame);
-    DPSetCornerRadius(self, NSEqualRects(adjusted, frame) ? 0 : DPEdgeToEdge.progress * DPWindowPadding);
+    DPSetCornerRadius(self, NSEqualRects(adjusted, frame) ? 0 : DPEdgeToEdgeProgress(self) * DPWindowPadding);
     DPCallOriginal(DPContainer_setFrame, self, adjusted);
 }
 
@@ -74,7 +80,7 @@ static NSString *DPVerifyEdgeToEdge(DPPatch *patch) {
     for (NSView *container in containers) {
         NSValue *requested = DPRequestedFrame(container);
         if (!requested) return @"never saw Dia place the web content";
-        if (!patch->on || DPChatCard(container)) {
+        if (!(patch->on || DPInPeek(container)) || DPChatCard(container)) {
             if (!NSEqualRects(container.frame, requested.rectValue)) return @"web content isn't where Dia put it";
             continue;
         }

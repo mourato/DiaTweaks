@@ -4,6 +4,7 @@
 #import "Patches/EdgeToEdge/EdgeToEdge.h"
 #import "Patches/HideToolbar/HideToolbar.h"
 #import <dlfcn.h>
+#import <objc/message.h>
 #import <os/log.h>
 
 // Set on a window while it's shown as a Peek, whose header takes the toolbar's place, whatever hide toolbar says.
@@ -16,6 +17,11 @@ BOOL DPInPeek(NSView *view) {
 
 static void DPRelayoutPanesIn(NSWindow *window) {
     for (NSView *pane in DPPanes) if (pane.window == window) pane.needsLayout = YES;
+    // Edge-to-edge treats a Peek's page as always edge to edge; the page is placed again to grow or shrink it.
+    for (NSView *container in DPContainers) {
+        NSValue *requested = DPRequestedFrame(container);
+        if (container.window == window && requested) container.frame = requested.rectValue;
+    }
     window.contentView.needsLayout = YES;
 }
 
@@ -263,7 +269,6 @@ static NSURL *DPPeekCurrentURL(DPPeekBackdrop *backdrop);
     // Peek's own top bar (a popup's title bar, or a browser window's toolbar), so it moves and scales with the page.
     _header = [NSView new];
     _header.wantsLayer = YES;
-    _header.layer.backgroundColor = NSColor.windowBackgroundColor.CGColor;
     NSArray *navigation = @[@[@"chevron.left", @"Back"], @[@"chevron.right", @"Forward"], @[@"arrow.clockwise", @"Reload"]];
     for (NSUInteger i = 0; i < navigation.count; i++) {
         NSButton *button = [DPPeekHeaderButton buttonWithImage:[NSImage imageWithSystemSymbolName:navigation[i][0] accessibilityDescription:navigation[i][1]]
@@ -338,6 +343,90 @@ static NSURL *DPPeekCurrentURL(DPPeekBackdrop *backdrop);
 }
 
 @end
+
+#pragma mark - Header color
+
+// The header takes the page's color the way Dia's toolbar does: the color Dia samples from the top of the rendered
+// page, so a sticky header shows through after scrolling. Until a sample arrives, the theme-color the page declares,
+// else the background it paints. Chromium reports all of them on the page's WebContents, which knows its view.
+static NSHashTable *DPWebContentsSeen;
+static char DPTopBandColorKey;
+
+static NSColor *DPColorFromArc(id arcColor) {
+    if ([arcColor isKindOfClass:NSColor.class]) return arcColor;
+    if (![arcColor respondsToSelector:NSSelectorFromString(@"a")]) return nil;
+    unsigned char (*channel)(id, SEL) = (void *)objc_msgSend;
+    CGFloat alpha = channel(arcColor, NSSelectorFromString(@"a")) / 255.0;
+    if (alpha == 0) return nil;
+    return [NSColor colorWithSRGBRed:channel(arcColor, NSSelectorFromString(@"r")) / 255.0 green:channel(arcColor, NSSelectorFromString(@"g")) / 255.0
+                                blue:channel(arcColor, NSSelectorFromString(@"b")) / 255.0 alpha:alpha];
+}
+
+static NSColor *DPPageColorIn(NSWindow *window) {
+    for (id contents in DPWebContentsSeen) {
+        NSView *view = [contents valueForKey:@"nativeView"];
+        if (view.window != window) continue;
+        NSColor *color = DPGet(contents, &DPTopBandColorKey) ?: DPColorFromArc([contents valueForKey:@"themeColor"])
+            ?: DPColorFromArc([contents valueForKey:@"rootBackgroundColor"]);
+        if (color) return color;
+    }
+    return nil;
+}
+
+// The buttons and address follow the color: dark on a light page, light on a dark one.
+static void DPPeekTintHeader(NSWindow *peek) {
+    DPPeekBackdrop *backdrop = peek ? objc_getAssociatedObject(peek, &DPPeekBackdropKey) : nil;
+    NSView *header = backdrop.header;
+    if (!header) return;
+    NSColor *color = [DPPageColorIn(peek) colorWithAlphaComponent:1];
+    header.appearance = nil;
+    if (color) {
+        NSColor *rgb = [color colorUsingColorSpace:NSColorSpace.sRGBColorSpace];
+        CGFloat luminance = 0.2126 * rgb.redComponent + 0.7152 * rgb.greenComponent + 0.0722 * rgb.blueComponent;
+        header.appearance = [NSAppearance appearanceNamed:luminance < 0.5 ? NSAppearanceNameDarkAqua : NSAppearanceNameAqua];
+    }
+    [header.effectiveAppearance performAsCurrentDrawingAppearance:^{
+        header.layer.backgroundColor = (color ?: NSColor.windowBackgroundColor).CGColor;
+    }];
+}
+
+static void DPPageColorChanged(id contents) {
+    [DPWebContentsSeen addObject:contents];
+    NSView *view = [contents valueForKey:@"nativeView"];
+    if (view.window && DPInPeek(view)) DPPeekTintHeader(view.window);
+}
+
+static void DPWebContents_setThemeColor(id self, SEL _cmd, id color) {
+    DPCallOriginal(DPWebContents_setThemeColor, self, color);
+    DPPageColorChanged(self);
+}
+
+static void DPWebContents_setRootBackgroundColor(id self, SEL _cmd, id color) {
+    DPCallOriginal(DPWebContents_setRootBackgroundColor, self, color);
+    DPPageColorChanged(self);
+}
+
+// Dia's handler for the sampled color, on the delegate of the page's WebContents.
+static void DPTopBand_didSample(id self, SEL _cmd, id contents, id color, BOOL crossfade) {
+    DPCallOriginal(DPTopBand_didSample, self, contents, color, crossfade);
+    if (!contents) return;
+    DPSet(contents, &DPTopBandColorKey, DPColorFromArc(color));
+    DPPageColorChanged(contents);
+}
+
+// Hooked only if the handler takes the color as an object, so a changed signature can't be misread.
+static void DPHookTopBandColor(void) {
+    SEL sel = NSSelectorFromString(@"webContents:didSampleTopBandColor:shouldCrossfade:");
+    Method method = class_getInstanceMethod(objc_getClass(DPDiaWebContent), sel);
+    const char *types = method ? method_getTypeEncoding(method) : NULL;
+    char color[8] = "", object[8] = "";
+    if (types) method_getArgumentType(method, 3, color, sizeof color), method_getArgumentType(method, 2, object, sizeof object);
+    if (!types || color[0] != '@' || object[0] != '@') {
+        os_log(DPLog(), "Peek can't follow the page's top color: handler is %{public}s", types ?: "missing");
+        return;
+    }
+    DPHook(DPDiaWebContent, sel, (IMP)DPTopBand_didSample);
+}
 
 // A small copy of the card centred on the clicked link, which the Peek grows out of and shrinks back into.
 static NSRect DPPeekSeed(NSPoint origin, NSRect card) {
@@ -596,6 +685,7 @@ static void DPPresentPeek(NSWindow *peek, NSWindow *parent) {
     [parent addChildWindow:peek ordered:NSWindowAbove];
     [peek orderWindow:NSWindowAbove relativeTo:backdrop.windowNumber];
     [backdrop layoutPeek];
+    DPPeekTintHeader(peek);
     DPPeekHideSidebar(peek, 6);
 
     // The page itself grows out of the clicked link, settling with a slight ease like Arc's spring.
@@ -654,7 +744,7 @@ static void DPPeekWindowAppeared(NSNotification *note) {
     // The first browser window Dia opens for the link becomes the Peek, popup or not.
     if (!DPPeekCandidate(window) || objc_getAssociatedObject(window, &DPPeekBackdropKey)) return;
     DPPeekPendingUntil = 0;
-    os_log(DPLog(), "Peek claimed a %{public}@", NSStringFromClass(window.class));
+    os_log(DPLog(), "Peek claimed a %{public}@ %.0f ms after the click", NSStringFromClass(window.class), (CACurrentMediaTime() - DPShiftClickAt) * 1000);
     DPPresentPeek(window, parent);
 }
 
@@ -664,6 +754,10 @@ static void DPInstallPeek(void) {
     DPHook(DPDiaNavigationAction, NSSelectorFromString(@"navigationDisposition"), (IMP)DPNavigationAction_disposition);
     DPHook(DPDiaPlatformWindow, @selector(orderWindow:relativeTo:), (IMP)DPWindow_orderWindow);
     DPHook(DPDiaPopupContent, @selector(layout), (IMP)DPPopupContent_layout);
+    DPWebContentsSeen = [NSHashTable weakObjectsHashTable];
+    DPHook(DPDiaArcWebContents, @selector(setThemeColor:), (IMP)DPWebContents_setThemeColor);
+    DPHook(DPDiaArcWebContents, @selector(setRootBackgroundColor:), (IMP)DPWebContents_setRootBackgroundColor);
+    DPHookTopBandColor();
     DPPeekWatchClicks();
     for (NSNotificationName name in @[NSWindowDidBecomeKeyNotification, NSWindowDidBecomeMainNotification])
         [NSNotificationCenter.defaultCenter addObserverForName:name object:nil queue:nil usingBlock:^(NSNotification *note) { DPPeekWindowAppeared(note); }];
@@ -679,7 +773,7 @@ DP_PATCH(DPPeek) {
     .detail = @"Shift-click a link to preview it over the current page, like Arc. Click outside or press Escape to close. Experimental.",
     .symbol = @"eye.fill",
     .tint = @"systemGreenColor",
-    .classes = DPClasses(DPDiaWebContent, DPDiaNavigationAction, DPDiaPlatformWindow, DPDiaPopupWindow, DPDiaPopupContent),
+    .classes = DPClasses(DPDiaWebContent, DPDiaNavigationAction, DPDiaPlatformWindow, DPDiaPopupWindow, DPDiaPopupContent, DPDiaArcWebContents),
     .install = DPInstallPeek,
     .apply = DPApplyPeek,
 };

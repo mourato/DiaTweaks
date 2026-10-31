@@ -16,6 +16,7 @@
 #define DPDiaTabGroupProperties "ArcTabGroupProperties"
 #define DPDiaWebContent         "ADK.WebContentChromium"
 #define DPDiaNavigationAction   "ArcNavigationAction"
+#define DPDiaArcWebContents     "ArcWebContents"  // Chromium's WebContents; knows the page's theme color and its view.
 #define DPDiaPlatformWindow     "Window.PlatformWindow"
 #define DPDiaPopupWindow        "Popup.PlatformPopupWindow"
 #define DPDiaPopupContent       "Popup.PopupContentView"
