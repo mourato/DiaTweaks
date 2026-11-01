@@ -26,6 +26,7 @@ DP_PATCH(DP$name) {
     .detail = @"TODO",
     .symbol = @"questionmark.square",
     .tint = @"systemGrayColor",
+    .section = @"Toolbar",
     .hides = DPIsTarget,
 };
 PATCH

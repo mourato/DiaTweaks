@@ -1,0 +1,43 @@
+#!/bin/sh
+# Drafts the notes for release $1 from the commits since the tag before it.
+set -eu
+cd "$(dirname "$0")/.."
+tag=$1
+repo=${GITHUB_REPOSITORY:-JaceThings/DiaTweaks}
+previous=$(git describe --tags --abbrev=0 "$tag^" 2>/dev/null || true)
+range=${previous:+$previous..}$tag
+
+# An annotated tag's message is the announcement: git tag -a v1.2.0 -m "…"
+if [ "$(git cat-file -t "$tag")" = tag ]; then
+    printf '## 📣 Announcement\n\n%s\n\n' "$(git cat-file tag "$tag" | sed '1,/^$/d; /^-----BEGIN/,$d')"
+fi
+
+keys() { [ -z "$1" ] || git grep -h -o '\.key = @"[^"]*"' "$1" -- src/dylib/Patches | sed 's/.*@"//; s/"$//'; }
+old=$(keys "$previous")
+
+# A patch whose key wasn't there at the last tag is a new tweak; the commits that added it aren't listed again.
+tweaks='' skip=''
+for key in $(keys "$tag"); do
+    printf '%s\n' "$old" | grep -qx "$key" && continue
+    patch=$(git grep -h -A8 "\.key = @\"$key\"" "$tag" -- src/dylib/Patches)
+    title=$(printf '%s\n' "$patch" | sed -n 's/.*\.title = @"\(.*\)",/\1/p' | head -1)
+    detail=$(printf '%s\n' "$patch" | sed -n 's/.*\.detail = @"\(.*\)",/\1/p' | head -1)
+    tweaks="$tweaks- **$title**: $detail [More](https://github.com/$repo/wiki/$(printf '%s' "$title" | tr ' ' -))
+"
+    skip="$skip $(git log --format=%H -G"\.key = @\"$key\"" "$range")"
+done
+[ -z "$tweaks" ] || printf '## ✨ New tweaks\n\n%s\n' "$tweaks"
+
+commits=$(git log --format='%H %s' "$range")
+for sha in $skip; do commits=$(printf '%s\n' "$commits" | grep -v "^$sha" || true); done
+commits=$(printf '%s\n' "$commits" | cut -d' ' -f2-)
+
+# "fix(dylib): square the corners (#6)" becomes "Square the corners (#6)".
+section() {
+    lines=$(printf '%s\n' "$commits" | grep -E "^($1)(\([^)]*\))?!?: " | perl -pe 's/^[a-z]+(\([^)]*\))?!?: //; s/^(.)/\u$1/' || true)
+    [ -z "$lines" ] || printf '## %s\n\n%s\n\n' "$2" "$(printf '%s\n' "$lines" | sed 's/^/- /')"
+}
+
+section feat '⚡️ Improvements'
+section 'fix|perf' '🐛 Fixes'
+echo "🧪 Tested with Dia VERSION · [All changes](https://github.com/$repo/compare/${previous:-$(git rev-list --max-parents=0 "$tag")}...$tag)"

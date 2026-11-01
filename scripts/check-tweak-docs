@@ -1,0 +1,29 @@
+#!/bin/sh
+# Fails unless every patch in build/patches.json has a wiki page and a link to it in the wiki's sidebar. Run after make.
+set -eu
+cd "$(dirname "$0")/.."
+manifest=build/patches.json
+[ -f "$manifest" ] || { echo "$manifest is missing: run make first" >&2; exit 1; }
+wiki=$(mktemp -d)
+trap 'rm -rf "$wiki"' EXIT
+git clone -q --depth 1 https://github.com/JaceThings/DiaTweaks.wiki.git "$wiki"
+
+count=$(plutil -extract patches raw -o - "$manifest")
+failed=0
+i=0
+while [ "$i" -lt "$count" ]; do
+    title=$(plutil -extract "patches.$i.title" raw -o - "$manifest")
+    # GitHub names a wiki page's file after its title, with spaces as hyphens.
+    page=$(echo "$title" | tr ' ' '-')
+    if [ ! -f "$wiki/$page.md" ]; then
+        echo "the wiki has no page called \"$title\": add one from docs/tweak-page.md" >&2
+        failed=1
+    fi
+    if ! grep -qF "]($page)" "$wiki/_Sidebar.md"; then
+        echo "the wiki sidebar has no link to $page: add it under its section" >&2
+        failed=1
+    fi
+    i=$((i + 1))
+done
+[ "$failed" -eq 0 ] && echo "all $count tweaks have a wiki page"
+exit "$failed"

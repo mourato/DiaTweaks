@@ -815,6 +815,7 @@ DP_PATCH(DPPeek) {
     .detail = @"Shift-click a link to preview it over the current page, like Arc. Click outside or press Escape to close. Experimental.",
     .symbol = @"eye.fill",
     .tint = @"systemGreenColor",
+    .section = @"Page",
     .classes = DPClasses(DPDiaWebContent, DPDiaNavigationAction, DPDiaPlatformWindow, DPDiaPopupWindow, DPDiaPopupContent, DPDiaArcWebContents),
     .install = DPInstallPeek,
     .apply = DPApplyPeek,

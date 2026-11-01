@@ -1,6 +1,7 @@
 #import "StdPatch/StdPatch.h"
 #import "StdPatch/Hide.h"
 #include <mach-o/getsect.h>
+#include <notify.h>
 
 extern const struct mach_header_64 __dso_handle;
 
@@ -9,6 +10,8 @@ static const CFTimeInterval DPAnimationDuration = 0.25;
 DPPatch *const *DPPatches;
 NSUInteger DPPatchCount;
 static NSUserDefaults *DPDefaults;
+
+NSNotificationName const DPPatchesDidChangeNotification = @"DPPatchesDidChange";
 
 DPPatch *DPPatchNamed(NSString *key) {
     for (NSUInteger i = 0; key && i < DPPatchCount; i++) if ([DPPatches[i]->key isEqualToString:key]) return DPPatches[i];
@@ -58,8 +61,8 @@ static int DPCompareOrder(const void *a, const void *b) {
     return (*(DPPatch *const *)a)->order - (*(DPPatch *const *)b)->order;
 }
 
-void DPLoadPatches(void) {
-    DPDefaults = [[NSUserDefaults alloc] initWithSuiteName:@"com.diapatches"];
+// The DP_PATCH entries, in Settings order.
+static void DPReadPatches(void) {
     unsigned long size = 0;
     DPPatch **entries = (DPPatch **)getsectiondata(&__dso_handle, "__DATA", "__dppatches", &size);
     DPPatch **sorted = malloc(size);
@@ -67,6 +70,11 @@ void DPLoadPatches(void) {
     DPPatchCount = size / sizeof *sorted;
     qsort(sorted, DPPatchCount, sizeof *sorted, DPCompareOrder);
     DPPatches = sorted;
+}
+
+void DPLoadPatches(void) {
+    DPDefaults = [[NSUserDefaults alloc] initWithSuiteName:@"com.diapatches"];
+    DPReadPatches();
 
     for (NSUInteger i = 0; i < DPPatchCount; i++)
         for (const char *const *name = DPPatches[i]->classes; name && *name; name++) DPPatches[i]->unavailable |= !objc_getClass(*name);
@@ -81,7 +89,35 @@ void DPLoadPatches(void) {
     }
 }
 
+// diatweaks saves settings, then posts com.diapatches.changed. They apply like switches flipped in Settings, without saving them again.
+static void DPApplySavedSettings(void) {
+    CFPreferencesAppSynchronize(CFSTR("com.diapatches"));
+    for (NSUInteger i = 0; i < DPPatchCount; i++) DPSetPatch(DPPatches[i], DPSavedOn(DPPatches[i]), NO);
+    [NSNotificationCenter.defaultCenter postNotificationName:DPPatchesDidChangeNotification object:nil];
+}
+
 void DPInstallPatches(void) {
     for (NSUInteger i = 0; i < DPPatchCount; i++) if (!DPPatches[i]->unavailable && DPPatches[i]->install) DPPatches[i]->install();
     DPInstallHides();
+    int token;
+    notify_register_dispatch("com.diapatches.changed", &token, dispatch_get_main_queue(), ^(int _) { DPApplySavedSettings(); });
+}
+
+BOOL DPWriteManifest(NSString *path) {
+    DPReadPatches();
+    NSMutableArray<NSDictionary *> *patches = [NSMutableArray new];
+    for (NSUInteger i = 0; i < DPPatchCount; i++) {
+        DPPatch *patch = DPPatches[i], *required = DPRequired(patch), *disabler = DPPatchNamed(patch->disabledBy);
+        [patches addObject:@{
+            @"key": patch->key,
+            @"title": patch->title,
+            @"detail": patch->detail,
+            @"defaultOn": @(patch->defaultOn),
+            @"requires": required ? required->key : NSNull.null,
+            @"disabledBy": disabler ? disabler->key : NSNull.null,
+        }];
+    }
+    NSData *json = [NSJSONSerialization dataWithJSONObject:@{@"version": @1, @"patches": patches}
+                                                   options:NSJSONWritingPrettyPrinted | NSJSONWritingSortedKeys error:nil];
+    return [json writeToFile:path atomically:YES];
 }

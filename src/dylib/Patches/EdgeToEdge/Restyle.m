@@ -39,4 +39,14 @@ void DPInstallRestyle(void) {
     DPHook(DPDiaContentContainer, @selector(layout), (IMP)DPContainer_layoutOrUpdateLayer);
     DPHook(DPDiaContentContainer, @selector(updateLayer), (IMP)DPContainer_layoutOrUpdateLayer);
     DPHook(DPDiaShadowView, @selector(layout), (IMP)DPShadow_layout);
+    // Full screen squares the page's corners, but a window already the screen's size doesn't lay out on the way in or out.
+    // AppKit flips the style mask just after each will notification, so restyle then, and again once it's done.
+    NSArray<NSNotificationName> *names = @[NSWindowWillEnterFullScreenNotification, NSWindowDidEnterFullScreenNotification,
+                                           NSWindowWillExitFullScreenNotification, NSWindowDidExitFullScreenNotification];
+    for (NSNotificationName name in names)
+        [NSNotificationCenter.defaultCenter addObserverForName:name object:nil queue:nil usingBlock:^(NSNotification *_) {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                for (NSView *container in DPContainers.allObjects) DPRestyleContainer(container);
+            });
+        }];
 }

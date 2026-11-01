@@ -14,13 +14,15 @@ NSView *DPGroup(NSArray<NSView *> *rows) {
         [stack addArrangedSubview:row];
         [row.widthAnchor constraintEqualToAnchor:stack.widthAnchor].active = YES;
     }];
-    NSBox *box = [NSBox new];
-    box.boxType = NSBoxCustom;
-    box.borderWidth = 0;
-    box.cornerRadius = 10;
-    box.fillColor = [NSColor.labelColor colorWithAlphaComponent:0.04];
-    box.contentViewMargins = NSZeroSize;
-    box.contentView = stack;
+    DPFillView *box = [DPFillView new];
+    stack.translatesAutoresizingMaskIntoConstraints = NO;
+    [box addSubview:stack];
+    [NSLayoutConstraint activateConstraints:@[
+        [stack.leadingAnchor constraintEqualToAnchor:box.leadingAnchor],
+        [stack.trailingAnchor constraintEqualToAnchor:box.trailingAnchor],
+        [stack.topAnchor constraintEqualToAnchor:box.topAnchor],
+        [stack.bottomAnchor constraintEqualToAnchor:box.bottomAnchor],
+    ]];
     return box;
 }
 
@@ -42,33 +44,111 @@ NSView *DPRow(NSView *leading, NSView *trailing) {
     return row;
 }
 
+@interface DPLinkRowView : NSView
+@property (nonatomic, copy) void (^open)(void);
+@end
+
+@implementation DPLinkRowView
+- (NSView *)hitTest:(NSPoint)point {
+    NSView *hit = [super hitTest:point];
+    BOOL control = [hit isKindOfClass:NSSwitch.class] || [hit isKindOfClass:NSButton.class];
+    return !hit || (control && ((NSControl *)hit).enabled) || hit.toolTip ? hit : self;
+}
+- (void)mouseDown:(NSEvent *)event {}
+- (void)mouseUp:(NSEvent *)event {
+    if (NSPointInRect([self convertPoint:event.locationInWindow fromView:nil], self.bounds)) self.open();
+}
+- (BOOL)accessibilityPerformPress {
+    self.open();
+    return YES;
+}
+@end
+
+NSView *DPLinkRow(NSView *row, NSString *title, void (^open)(void)) {
+    DPLinkRowView *link = [DPLinkRowView new];
+    link.open = open;
+    link.accessibilityElement = YES;
+    link.accessibilityRole = NSAccessibilityButtonRole;
+    link.accessibilityLabel = title;
+    row.translatesAutoresizingMaskIntoConstraints = NO;
+    [link addSubview:row];
+    [NSLayoutConstraint activateConstraints:@[
+        [row.leadingAnchor constraintEqualToAnchor:link.leadingAnchor],
+        [row.trailingAnchor constraintEqualToAnchor:link.trailingAnchor],
+        [row.topAnchor constraintEqualToAnchor:link.topAnchor],
+        [row.bottomAnchor constraintEqualToAnchor:link.bottomAnchor],
+    ]];
+    return link;
+}
+
+NSImageView *DPSymbol(NSString *symbol, CGFloat size, NSColor *color) {
+    NSImageView *view = [NSImageView imageViewWithImage:[NSImage imageWithSystemSymbolName:symbol accessibilityDescription:nil]];
+    view.symbolConfiguration = [NSImageSymbolConfiguration configurationWithPointSize:size weight:NSFontWeightSemibold];
+    view.contentTintColor = color;
+    return view;
+}
+
+void DPFillStack(NSStackView *stack, NSArray<NSView *> *views) {
+    stack.orientation = NSUserInterfaceLayoutOrientationVertical;
+    stack.spacing = 8;
+    for (NSView *view in views) {
+        [stack addArrangedSubview:view];
+        [view.widthAnchor constraintEqualToAnchor:stack.widthAnchor].active = YES;
+    }
+}
+
+NSStackView *DPColumn(NSArray<NSView *> *views, CGFloat spacing) {
+    NSStackView *stack = [NSStackView stackViewWithViews:views];
+    stack.orientation = NSUserInterfaceLayoutOrientationVertical;
+    stack.alignment = NSLayoutAttributeLeading;
+    stack.spacing = spacing;
+    return stack;
+}
+
+NSTextField *DPHeader(NSString *text) { return DPLabel(text, 12, NSFontWeightSemibold, NSColor.secondaryLabelColor); }
+
 NSTextField *DPLabel(NSString *text, CGFloat size, NSFontWeight weight, NSColor *color) {
     NSTextField *label = [NSTextField wrappingLabelWithString:text];
+    label.lineBreakStrategy = NSLineBreakStrategyStandard;
     label.font = [NSFont systemFontOfSize:size weight:weight];
     label.textColor = color;
     return label;
 }
 
-NSView *DPIconTile(NSString *symbol, NSColor *color) {
+NSView *DPIconTile(NSString *symbol, NSColor *color) { return DPIconTileOfSize(symbol, color, 20); }
+
+NSView *DPIconTileOfSize(NSString *symbol, NSColor *color, CGFloat size) {
     NSView *tile = [NSView new];
     tile.wantsLayer = YES;
     tile.layer.backgroundColor = color.CGColor;
-    tile.layer.cornerRadius = 5;
+    tile.layer.cornerRadius = size / 4;
     tile.layer.cornerCurve = kCACornerCurveContinuous;
-    NSImageView *glyph = [NSImageView imageViewWithImage:[NSImage imageWithSystemSymbolName:symbol accessibilityDescription:nil]];
-    glyph.symbolConfiguration = [NSImageSymbolConfiguration configurationWithPointSize:12 weight:NSFontWeightSemibold];
-    glyph.contentTintColor = NSColor.whiteColor;
+    NSImageView *glyph = DPSymbol(symbol, size * 0.6, NSColor.whiteColor);
     glyph.translatesAutoresizingMaskIntoConstraints = NO;
     tile.translatesAutoresizingMaskIntoConstraints = NO;
     [tile addSubview:glyph];
     [NSLayoutConstraint activateConstraints:@[
-        [tile.widthAnchor constraintEqualToConstant:20],
-        [tile.heightAnchor constraintEqualToConstant:20],
+        [tile.widthAnchor constraintEqualToConstant:size],
+        [tile.heightAnchor constraintEqualToConstant:size],
         [glyph.centerXAnchor constraintEqualToAnchor:tile.centerXAnchor],
         [glyph.centerYAnchor constraintEqualToAnchor:tile.centerYAnchor],
     ]];
     return tile;
 }
+
+// An NSBox resolves its fill once, so it kept the dark one in light mode.
+@implementation DPFillView
+- (instancetype)initWithFrame:(NSRect)frame {
+    if (!(self = [super initWithFrame:frame])) return nil;
+    self.wantsLayer = YES;
+    self.layer.cornerRadius = 10;
+    self.layer.cornerCurve = kCACornerCurveContinuous;
+    self.layer.masksToBounds = YES;
+    return self;
+}
+- (BOOL)wantsUpdateLayer { return YES; }
+- (void)updateLayer { self.layer.backgroundColor = [NSColor.labelColor colorWithAlphaComponent:0.05].CGColor; }
+@end
 
 @implementation DPFlippedView
 - (BOOL)isFlipped { return YES; }

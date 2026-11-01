@@ -1,0 +1,33 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Tag to build and replace DiaTweaks.zip on
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: macos-latest
+    env:
+      TAG: ${{ inputs.tag || github.ref_name }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+          fetch-depth: 0
+      - run: scripts/package
+      # A new tag gets a draft, so nobody is offered it until its notes are written and it's published.
+      - run: |
+          gh release view "$TAG" >/dev/null 2>&1 && exit 0
+          git fetch --force --tags  # checkout leaves the tag lightweight, which loses its announcement
+          scripts/release-notes "$TAG" > "$RUNNER_TEMP/notes.md"
+          gh release create "$TAG" --draft --verify-tag --title "$TAG" --notes-file "$RUNNER_TEMP/notes.md"
+      - run: gh release upload "$TAG" build/DiaTweaks.zip --clobber

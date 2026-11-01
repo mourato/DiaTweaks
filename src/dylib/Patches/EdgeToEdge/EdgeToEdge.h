@@ -4,6 +4,8 @@
 extern DPPatch DPEdgeToEdge, DPSquareSidebarCorners;
 extern const CGFloat DPWindowPadding;
 extern NSHashTable<NSView *> *DPContainers;  // Every web content container Dia placed.
+static const CACornerMask DPLeftCorners = kCALayerMinXMinYCorner | kCALayerMinXMaxYCorner;
+static const CACornerMask DPRightCorners = kCALayerMaxXMinYCorner | kCALayerMaxXMaxYCorner;
 
 NSValue *DPRequestedFrame(NSView *container);   // Where Dia put the container, before edge-to-edge grew it.
 NSView *DPRoundedContent(NSView *container);    // The view inside the container that clips the page to rounded corners.
@@ -13,4 +15,5 @@ void DPInstallRestyle(void);
 void DPRestyleContainer(NSView *container);
 void DPApplySquareCorners(NSView *container);
 BOOL DPBesideSidebar(NSView *container);
+BOOL DPFullScreen(NSView *container);  // In a full screen window, with edge-to-edge not stepping aside for Chat.
 CGPathRef DPReshapeCorners(CGPathRef path, CGFloat extent, CGFloat rightScale, CGFloat leftScale);

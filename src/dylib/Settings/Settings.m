@@ -11,9 +11,15 @@ static BOOL DPIsPatchesRow(NSTableView *table, NSInteger row) {
 @interface DPSettings : NSObject
 @property (nonatomic, weak) NSTableView *table;
 @property (nonatomic, weak) NSTextField *title;
-@property (nonatomic, copy) NSString *originalTitle;
+@property (nonatomic, copy) NSString *originalTitle, *shownTitle;
 @property (nonatomic, strong) DPPaneView *pane;
+@property (nonatomic) NSWindowStyleMask mask;
+@property (nonatomic) NSSize minSize, maxSize;
+@property (nonatomic) CGFloat fixedHeight;
+@property (nonatomic) BOOL backWasEnabled;
 @end
+
+static __weak DPPaneView *DPShownPane;
 
 @implementation DPSettings
 
@@ -34,7 +40,14 @@ static BOOL DPIsPatchesRow(NSTableView *table, NSInteger row) {
     self.pane.frame = detail.bounds;
     self.pane.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
     [detail addSubview:self.pane positioned:NSWindowAbove relativeTo:nil];
-    [self.pane refresh];
+    [self.pane.overview refresh];
+    DPShownPane = self.pane;
+    __weak DPSettings *weakSelf = self;
+    self.pane.titleChanged = ^(NSString *title, BOOL canGoBack) {
+        weakSelf.title.stringValue = weakSelf.shownTitle = title;
+        [weakSelf borrowBack:canGoBack];
+    };
+    [self allowResizing:YES];
 
     NSToolbar *toolbar = window.toolbar;
     DPSet(toolbar, &DPSearchItemKey, self.pane.searchItem);
@@ -45,7 +58,7 @@ static BOOL DPIsPatchesRow(NSTableView *table, NSInteger row) {
         if ([item.itemIdentifier isEqualToString:@"PreferencesPaneTitle"])
             self.title = (NSTextField *)DPFindView(item.view, ^BOOL(NSView *v) { return [v isKindOfClass:NSTextField.class]; });
     self.originalTitle = self.title.stringValue;
-    self.title.stringValue = @"Patches";
+    self.title.stringValue = self.shownTitle = @"Patches";
 }
 
 - (void)hidePane {
@@ -57,9 +70,46 @@ static BOOL DPIsPatchesRow(NSTableView *table, NSInteger row) {
         [toolbar removeItemAtIndex:index];
         if (index > 0 && [toolbar.items[index - 1].itemIdentifier isEqualToString:NSToolbarFlexibleSpaceItemIdentifier]) [toolbar removeItemAtIndex:index - 1];
     }
-    self.pane.searchItem.searchField.stringValue = @"";
-    [self.pane updateRows];
-    if ([self.title.stringValue isEqualToString:@"Patches"]) self.title.stringValue = self.originalTitle;
+    NSString *shown = self.title.stringValue;
+    if (self.pane.showsPage) [self borrowBack:NO];
+    [self.pane reset];
+    DPShownPane = nil;
+    [self allowResizing:NO];
+    if ([shown isEqualToString:self.shownTitle]) self.title.stringValue = self.originalTitle;
+}
+
+- (void)borrowBack:(BOOL)borrow {
+    NSToolbarItem *back = [self backItem];
+    if (borrow) self.backWasEnabled = back.enabled;
+    back.enabled = borrow || self.backWasEnabled;
+}
+
+- (NSToolbarItem *)backItem {
+    for (NSToolbarItem *item in self.table.window.toolbar.items)
+        if ([item.itemIdentifier isEqualToString:@"PreferencesNavigateBack"]) return item;
+    return nil;
+}
+
+- (void)allowResizing:(BOOL)allow {
+    NSWindow *window = self.table.window;
+    if (allow == (self.fixedHeight > 0)) return;
+    if (allow) {
+        self.mask = window.styleMask;
+        self.minSize = window.contentMinSize;
+        self.maxSize = window.contentMaxSize;
+        self.fixedHeight = window.frame.size.height;
+        CGFloat width = window.contentLayoutRect.size.width;
+        window.styleMask |= NSWindowStyleMaskResizable;
+        window.contentMinSize = NSMakeSize(width, 400);
+        window.contentMaxSize = NSMakeSize(width, CGFLOAT_MAX);
+        return;
+    }
+    NSRect frame = window.frame;
+    window.styleMask = self.mask;
+    window.contentMinSize = self.minSize;
+    window.contentMaxSize = self.maxSize;
+    [window setFrame:NSMakeRect(frame.origin.x, NSMaxY(frame) - self.fixedHeight, frame.size.width, self.fixedHeight) display:YES];
+    self.fixedHeight = 0;
 }
 @end
 
@@ -91,7 +141,13 @@ static NSToolbarItem *DPSettings_toolbarItem(id self, SEL _cmd, NSToolbar *toolb
     return DPCallOriginal(DPSettings_toolbarItem, self, toolbar, identifier, willInsert);
 }
 
+static void DPSettings_handleBack(id self, SEL _cmd) {
+    if (DPShownPane.showsPage) return [DPShownPane goBack];
+    DPCallOriginal(DPSettings_handleBack, self);
+}
+
 void DPInstallSettings(void) {
+    DPHook(DPDiaSettingsController, @selector(handleBack), (IMP)DPSettings_handleBack);
     DPHook(DPDiaSettingsSidebar, @selector(numberOfRowsInTableView:), (IMP)DPSidebar_numberOfRows);
     DPHook(DPDiaSettingsSidebar, @selector(tableView:viewForTableColumn:row:), (IMP)DPSidebar_viewForRow);
     DPHook(DPDiaSettingsSidebar, @selector(tableViewSelectionDidChange:), (IMP)DPSidebar_selectionDidChange);

@@ -13,9 +13,10 @@ struct DPPatch {
     int order;  // Settings lists patches by ascending order.
     __unsafe_unretained NSString *title, *detail;
     __unsafe_unretained NSString *symbol, *tint;  // SF Symbol and NSColor class property for the row's icon.
+    __unsafe_unretained NSString *section;  // Its group in Settings.
     const char *const *classes;  // Dia classes it needs (DPClasses). If one is missing, it stays off and Settings says so.
-    __unsafe_unretained NSString *requires;    // Key of a patch that must be on: Settings shows the row only then.
-    __unsafe_unretained NSString *disabledBy;  // Key of a patch that, while on, disables this one's switch.
+    __unsafe_unretained NSString *requires;    // Key of a patch that must be on. Settings lists this one as an option on that patch's page.
+    __unsafe_unretained NSString *disabledBy;  // Key of a patch that, while on, hides what this one changes. Settings marks it.
     BOOL (*hides)(NSView *view);  // While on, hides every view this matches in Dia's toolbar, sidebar and tab strip.
     void (*install)(void);        // Runs once at launch whether or not the patch is on; install hooks here.
     void (*apply)(DPPatch *patch);  // Applies a toggle at once. Without it, `progress` eases toward `on` while every patch's `relayout` runs each frame.
@@ -43,7 +44,9 @@ DPPatch *DPRequired(DPPatch *patch);  // The patch named by `requires`, or NULL.
 void DPSetPatch(DPPatch *patch, BOOL on, BOOL save);  // save: NO changes it only until Dia quits (test mode).
 BOOL DPSavedOn(DPPatch *patch);
 void DPLoadPatches(void);     // Reads every DP_PATCH, what it needs and its saved switch.
-void DPInstallPatches(void);  // Runs the installs of the available ones.
+void DPInstallPatches(void);  // Runs the installs of the available ones, and from then on applies settings diatweaks saves.
+BOOL DPWriteManifest(NSString *path);  // patches.json, the patch list diatweaks shows. Reads no settings.
+extern NSNotificationName const DPPatchesDidChangeNotification;  // Posted after a switch in Settings or diatweaks changed patches.
 
 #pragma mark Hooks
 

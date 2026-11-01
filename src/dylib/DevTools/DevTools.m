@@ -1,4 +1,5 @@
 #import "DevTools/DevTools.h"
+#import "Updates/Updates.h"
 #include <dlfcn.h>
 
 static void DPDescribe(NSView *view, NSUInteger depth, NSMutableString *out) {
@@ -52,5 +53,12 @@ void DPInstallDevTools(void) {
     DPListenForScripts();
     DPOnLaunch(^{
         DPAddMenuItem(@"Help", @"DiaPatches: Copy View Tree", ^{ DPCopyViewTree(); });
+        NSMenu *debug = [[NSMenu alloc] initWithTitle:@"Debug"];
+        [debug addItem:DPMenuItem(@"Pretend Dia Has an Update", ^{ [DPUpdates.shared pretend:DPDia]; })];
+        [debug addItem:DPMenuItem(@"Pretend DiaTweaks Has an Update", ^{ [DPUpdates.shared pretend:DPTweaks]; })];
+        [debug addItem:DPMenuItem(@"Stop Pretending", ^{ [DPUpdates.shared stopPretending]; })];
+        NSMenuItem *item = [[NSMenuItem alloc] initWithTitle:@"Debug" action:nil keyEquivalent:@""];
+        item.submenu = debug;
+        [NSApp.mainMenu insertItem:item atIndex:1];
     });
 }

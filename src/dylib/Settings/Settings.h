@@ -10,27 +10,71 @@ extern NSToolbarItemIdentifier const DPSearchItemIdentifier;
 // Controls.m: the pieces the pane is built from, styled like macOS System Settings.
 NSView *DPGroup(NSArray<NSView *> *rows);
 NSView *DPRow(NSView *leading, NSView *trailing);
+NSView *DPLinkRow(NSView *row, NSString *title, void (^open)(void));
 NSTextField *DPLabel(NSString *text, CGFloat size, NSFontWeight weight, NSColor *color);
+NSTextField *DPHeader(NSString *text);
 NSView *DPIconTile(NSString *symbol, NSColor *color);
+NSView *DPIconTileOfSize(NSString *symbol, NSColor *color, CGFloat size);
+NSImageView *DPSymbol(NSString *symbol, CGFloat size, NSColor *color);
+NSStackView *DPColumn(NSArray<NSView *> *views, CGFloat spacing);
+void DPFillStack(NSStackView *stack, NSArray<NSView *> *views);
 
 @interface DPFlippedView : NSView
 @end
 
-@interface DPPaneView : NSView <NSSearchFieldDelegate>
-@property (nonatomic, strong) NSSearchToolbarItem *searchItem;
-@property (nonatomic, strong) NSArray<NSSwitch *> *toggles;
-@property (nonatomic, strong) NSArray<NSArray *> *sections;  // header, group, rows
+@interface DPFillView : NSView
+@end
+
+@interface DPPatchSwitch : NSSwitch
+@property (nonatomic, readonly) DPPatch *patch;
+@property (nonatomic, readonly) NSImageView *hiddenIcon;
+- (NSView *)withHiddenIcon;
+- (instancetype)initWithPatch:(DPPatch *)patch;
+- (void)sync;
+@end
+
+// A patch, or a command when `patch` is NULL.
+typedef struct {
+    DPPatch *patch;
+    __unsafe_unretained NSString *key, *title, *detail, *symbol, *tint, *where;
+} DPItem;
+
+DPItem DPPatchItem(DPPatch *patch);
+void DPForEachOption(DPPatch *patch, void (^body)(DPPatch *option));
+NSString *DPWhyDisabled(DPPatch *patch);
+NSString *DPWhyHidden(DPPatch *patch);
+NSURL *DPWikiURL(DPItem item);
+
+@interface DPPreviewView : DPFillView
+- (instancetype)initWithKey:(NSString *)key;
+@end
+
+@interface DPPageView : NSStackView
+- (instancetype)initWithItem:(DPItem)item;
+- (void)sync;
+@end
+
+@interface DPOverviewView : NSStackView
+@property (nonatomic, copy) void (^open)(NSString *title, NSView *page);
 @property (nonatomic, strong) NSMapTable<NSView *, NSString *> *searchText;
-@property (nonatomic, strong) NSTextField *noResults, *notice, *status;
-@property (nonatomic, strong) NSButton *checkButton, *relaunchButton;
+@property (nonatomic, strong) NSTextField *updateSummary;
+- (void)syncWithQuery:(NSString *)query;
 @end
 
-@interface DPPaneView (Search)
-- (void)updateRows;
+@interface DPSoftwareUpdateView : NSStackView
 @end
 
-@interface DPPaneView (Updates)
+@interface DPOverviewView (Updates)
 - (NSArray<NSView *> *)makeUpdateRows;
 - (NSView *)makeSafeModeRow;
 - (void)refresh;
+@end
+
+@interface DPPaneView : NSView <NSSearchFieldDelegate>
+@property (nonatomic, strong) NSSearchToolbarItem *searchItem;
+@property (nonatomic, strong) DPOverviewView *overview;
+@property (nonatomic, copy) void (^titleChanged)(NSString *title, BOOL canGoBack);
+@property (nonatomic, readonly) BOOL showsPage;
+- (void)goBack;
+- (void)reset;
 @end
