@@ -15,25 +15,92 @@ BOOL DPInPeek(NSView *view) {
     return view.window && DPGet(view.window, &DPPeekBackdropKey);
 }
 
+static char DPPeekSidebarHiddenKey, DPPeekContentFrameKey;
+static const char *const DPSidebarRootClass = "_TtC10TabSidebarP33_1737451677CA9CA733FCF78BBDD9DE8A24SidebarContainerRootView";
+static const char *const DPFloatingSidebarClass = "Window.FloatingSidebarContainerView";
+
+static void DPPeekSidebar_setHidden(NSView *self, SEL _cmd, BOOL hidden) {
+    if (DPInPeek(self)) {
+        DPSet(self, &DPPeekSidebarHiddenKey, @(hidden));
+        hidden = YES;
+    }
+    DPCallOriginal(DPPeekSidebar_setHidden, self, hidden);
+}
+
+static void DPPeekHideView(NSView *view) {
+    if (!view || DPGet(view, &DPPeekSidebarHiddenKey)) return;
+    DPSet(view, &DPPeekSidebarHiddenKey, @(view.hidden));
+    ((void (*)(id, SEL, BOOL))DPOriginalIMP(view, @selector(setHidden:), (IMP)DPPeekSidebar_setHidden))(view, @selector(setHidden:), YES);
+}
+
+static void DPPeekSidebar_moved(NSView *self, SEL _cmd) {
+    DPCallOriginal(DPPeekSidebar_moved, self);
+    if (DPInPeek(self)) DPPeekHideView(self);
+}
+
+static void DPPeekContent_setFrame(NSView *self, SEL _cmd, NSRect frame) {
+    if (DPInPeek(self) && self.superview) {
+        DPSet(self, &DPPeekContentFrameKey, [NSValue valueWithRect:frame]);
+        CGFloat left = NSMinX(self.superview.bounds);
+        if (NSMinX(frame) > left) frame.size.width += NSMinX(frame) - left, frame.origin.x = left;
+    }
+    DPCallOriginal(DPPeekContent_setFrame, self, frame);
+}
+
+static void DPPeekContent_layout(NSView *self, SEL _cmd) {
+    DPCallOriginal(DPPeekContent_layout, self);
+    if (!DPInPeek(self)) return;
+    NSView *inner = DPFindView(self, ^BOOL(NSView *view) {
+        return [NSStringFromClass(view.class) containsString:@"AssistantSidebarViewController"];
+    });
+    if (inner && NSWidth(inner.frame) != NSWidth(self.bounds)) {
+        NSRect frame = inner.frame;
+        frame.size.width = NSWidth(self.bounds);
+        inner.frame = frame;
+        inner.needsLayout = YES;
+    }
+}
+
+static void DPPeekSidebarApply(NSWindow *window) {
+    NSView *root = window.contentView.superview;
+    for (const char *const *name = (const char *const[]){DPSidebarRootClass, DPFloatingSidebarClass, NULL}; *name; name++) {
+        NSView *view = DPFindView(root, ^BOOL(NSView *v) { return DPIsKind(v, *name); });
+        DPPeekHideView(view);
+    }
+    for (NSView *container in DPContainers) {
+        if (container.window != window) continue;
+        NSValue *requested = DPGet(container, &DPPeekContentFrameKey) ?: DPRequestedFrame(container);
+        if (requested) container.frame = requested.rectValue;
+        container.needsLayout = YES;
+    }
+}
+
+static void DPPeekSidebarRestore(NSWindow *window) {
+    NSView *root = window.contentView.superview;
+    for (const char *const *name = (const char *const[]){DPSidebarRootClass, DPFloatingSidebarClass, NULL}; *name; name++) {
+        NSView *view = DPFindView(root, ^BOOL(NSView *v) { return DPIsKind(v, *name); });
+        NSNumber *hidden = DPGet(view, &DPPeekSidebarHiddenKey);
+        if (hidden) {
+            DPSet(view, &DPPeekSidebarHiddenKey, nil);
+            view.hidden = hidden.boolValue;
+        }
+    }
+    for (NSView *container in DPContainers) {
+        if (container.window != window) continue;
+        NSValue *frame = DPGet(container, &DPPeekContentFrameKey);
+        DPSet(container, &DPPeekContentFrameKey, nil);
+        if (frame) container.frame = frame.rectValue;
+    }
+}
+
 static void DPRelayoutPanesIn(NSWindow *window) {
     for (NSView *pane in DPPanes) if (pane.window == window) pane.needsLayout = YES;
     // Edge-to-edge treats a Peek's page as always edge to edge; the page is placed again to grow or shrink it.
     for (NSView *container in DPContainers) {
-        NSValue *requested = DPRequestedFrame(container);
+        NSValue *requested = DPGet(container, &DPPeekContentFrameKey) ?: DPRequestedFrame(container);
         if (container.window == window && requested) container.frame = requested.rectValue;
     }
     window.contentView.needsLayout = YES;
-}
-
-// Docking the sidebar pushes the web content right; a floating or hidden sidebar leaves it at the window padding.
-static BOOL DPSidebarShownIn(NSWindow *window) {
-    CGFloat minX = CGFLOAT_MAX;
-    for (NSView *container in DPContainers) {
-        NSValue *requested = DPRequestedFrame(container);
-        if (container.window != window || !requested) continue;
-        minX = MIN(minX, NSMinX([container.superview convertRect:requested.rectValue toView:nil]));
-    }
-    return minX != CGFLOAT_MAX && minX > DPWindowPadding + 1;
 }
 
 // Shift-clicks reach Dia as popups, whose window has its own title and address bar above the page.
@@ -203,7 +270,7 @@ static NSURL *DPPeekCurrentURL(DPPeekBackdrop *backdrop);
 @property (nonatomic, strong) NSTimer *addressTimer;
 @property (nonatomic) NSPoint origin;
 @property (nonatomic, strong) NSURL *url;
-@property (nonatomic) BOOL animating, hidSidebar;
+@property (nonatomic) BOOL animating;
 @property (nonatomic, strong) NSSet<NSString *> *knownScriptedWindows;
 @property (nonatomic, strong) NSMutableArray *observers;
 @property (nonatomic, strong) id monitor;
@@ -538,6 +605,7 @@ static void DPPeekTearDown(NSWindow *peek) {
     DPPeekBackdrop *backdrop = objc_getAssociatedObject(peek, &DPPeekBackdropKey);
     if (!backdrop) return;
     objc_setAssociatedObject(peek, &DPPeekBackdropKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    DPPeekSidebarRestore(peek);
     DPRelayoutPanesIn(peek);
     for (id observer in backdrop.observers) [NSNotificationCenter.defaultCenter removeObserver:observer];
     if (backdrop.monitor) [NSEvent removeMonitor:backdrop.monitor];
@@ -580,15 +648,11 @@ static void DPOpenTabInFocusedWindow(NSURL *url) {
     if (!opened) os_log(DPLog(), "Peek couldn't open as a tab: %{public}@", error);
 }
 
-static void DPPeekHideSidebar(NSWindow *peek, int attempts);
-static void DPPeekRestoreSidebar(NSWindow *peek, DPPeekBackdrop *backdrop);
-
 // Like Arc's expand: the Peek's page becomes a tab of the window it came from.
 static BOOL DPPeekOpenAsTab(NSWindow *peek, DPPeekBackdrop *backdrop) {
     NSURL *url = DPPeekCurrentURL(backdrop);
     if (!url) return NO;
     NSWindow *host = backdrop.host;
-    DPPeekRestoreSidebar(peek, backdrop);
     [host removeChildWindow:peek];
     DPPeekTearDown(peek);
     [peek close];
@@ -609,7 +673,6 @@ static void DPPeekEnd(NSWindow *peek, DPPeekExit exit) {
         // Without a tab to move into, maximize takes over the parent's frame; split shares it.
         NSRect frame = host.frame, left, right;
         NSDivideRect(frame, &left, &right, floor(NSWidth(frame) / 2), NSMinXEdge);
-        DPPeekRestoreSidebar(peek, backdrop);
         [host removeChildWindow:peek];
         DPPeekTearDown(peek);
         DPPeekDress(peek, NO);
@@ -632,7 +695,6 @@ static void DPPeekEnd(NSWindow *peek, DPPeekExit exit) {
         ^CGFloat(CGFloat t) { return pow(1 - t, 1.5); },
         ^{
             peek.alphaValue = 0;
-            DPPeekRestoreSidebar(peek, backdrop);
             [peek performClose:nil];
             // A page can refuse to close (beforeunload); bring the Peek back instead of leaving it invisible.
             dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
@@ -641,35 +703,9 @@ static void DPPeekEnd(NSWindow *peek, DPPeekExit exit) {
                 [backdrop setChromeAlpha:1 animated:NO];
                 peek.hasShadow = YES;
                 DPShowWindowIn(peek, peek.frame);
-                DPPeekHideSidebar(peek, 6);
                 backdrop.animating = NO;
             });
         });
-}
-
-static BOOL DPToggleSidebar(void) { return DPPerformMenuItem(@"s", @"sidebar"); }
-
-// A Peek is just the page, as in Arc: a new Dia window opens with the sidebar as it was last left,
-// so it's closed while the Peek is still invisible. Layout can lag the window appearing, hence the retries.
-static void DPPeekHideSidebar(NSWindow *peek, int attempts) {
-    DPPeekBackdrop *backdrop = objc_getAssociatedObject(peek, &DPPeekBackdropKey);
-    if (!backdrop || backdrop.hidSidebar) return;
-    if (DPSidebarShownIn(peek)) {
-        if (peek.isKeyWindow && DPToggleSidebar()) backdrop.hidSidebar = YES;
-        return;
-    }
-    if (attempts > 0)
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.05 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-            DPPeekHideSidebar(peek, attempts - 1);
-        });
-}
-
-// Dia remembers the sidebar as the last window left it, so the Peek reopens its sidebar before it
-// closes or becomes a window of its own; otherwise later windows would open without one.
-static void DPPeekRestoreSidebar(NSWindow *peek, DPPeekBackdrop *backdrop) {
-    if (!backdrop.hidSidebar || !peek.isKeyWindow) return;
-    backdrop.hidSidebar = NO;
-    DPToggleSidebar();
 }
 
 static void DPPresentPeek(NSWindow *peek, NSWindow *parent) {
@@ -679,6 +715,7 @@ static void DPPresentPeek(NSWindow *peek, NSWindow *parent) {
     backdrop.knownScriptedWindows = DPPeekKnownScriptedWindows;
     objc_setAssociatedObject(peek, &DPPeekBackdropKey, backdrop, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     DPRelayoutPanesIn(peek);
+    DPPeekSidebarApply(peek);
     backdrop.alphaValue = 0;
     [parent addChildWindow:backdrop ordered:NSWindowAbove];
     [peek setFrame:backdrop.peekFrame display:NO];
@@ -686,7 +723,6 @@ static void DPPresentPeek(NSWindow *peek, NSWindow *parent) {
     [peek orderWindow:NSWindowAbove relativeTo:backdrop.windowNumber];
     [backdrop layoutPeek];
     DPPeekTintHeader(peek);
-    DPPeekHideSidebar(peek, 6);
 
     // The page itself grows out of the clicked link, settling with a slight ease like Arc's spring.
     backdrop.animating = YES;
@@ -749,6 +785,12 @@ static void DPPeekWindowAppeared(NSNotification *note) {
 }
 
 static void DPInstallPeek(void) {
+    DPHook(DPSidebarRootClass, @selector(setHidden:), (IMP)DPPeekSidebar_setHidden);
+    DPHook(DPFloatingSidebarClass, @selector(setHidden:), (IMP)DPPeekSidebar_setHidden);
+    DPHook(DPSidebarRootClass, @selector(viewDidMoveToWindow), (IMP)DPPeekSidebar_moved);
+    DPHook(DPFloatingSidebarClass, @selector(viewDidMoveToWindow), (IMP)DPPeekSidebar_moved);
+    DPHook(DPDiaContentContainer, @selector(setFrame:), (IMP)DPPeekContent_setFrame);
+    DPHook(DPDiaContentContainer, @selector(layout), (IMP)DPPeekContent_layout);
     DPHook(DPDiaWebContent, NSSelectorFromString(@"webContents:didCreateNewWebContent:targetURL:disposition:"), (IMP)DPWebContent_didCreate);
     DPHook(DPDiaWebContent, NSSelectorFromString(@"webContents:decidePolicyForNavigationAction:"), (IMP)DPWebContent_decidePolicy);
     DPHook(DPDiaNavigationAction, NSSelectorFromString(@"navigationDisposition"), (IMP)DPNavigationAction_disposition);
