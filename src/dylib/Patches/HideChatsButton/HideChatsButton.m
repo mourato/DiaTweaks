@@ -10,7 +10,7 @@ DP_PATCH(DPHideChatsButton) {
     .detail = @"Hide the Chats button in the tab bar or sidebar.",
     .symbol = @"doc.plaintext",
     .tint = @"systemTealColor",
-    .section = @"Sidebar and tab bar",
+    .section = @"Sidebar & Tab Bar",
     .classes = DPClasses(DPDiaLibraryButton, DPDiaLibraryCell),
     .hides = DPIsChatsButton,
 };

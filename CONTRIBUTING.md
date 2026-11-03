@@ -13,7 +13,7 @@ Keep it small, test it hard, show it working.
 
 ## Adding a patch
 
-Each patch is one folder in `src/dylib/Patches/`, built on StdPatch: `src/dylib/StdPatch/StdPatch.h` is the whole API. Apart from its [page](#documenting-a-patch), nothing outside the folder changes.
+Each patch is one folder in `src/dylib/Patches/`, built on StdPatch: `src/dylib/StdPatch/StdPatch.h` is the whole API. Nothing outside the folder changes.
 
 - `make patch NAME=HideFooButton` creates `Patches/HideFooButton/HideFooButton.m` with a `DP_PATCH` in it. That registers it: its row in Settings, its saved switch, its place in `make test` and its entry in `build/patches.json`, the list `diatweaks` shows, come from the fields, and `.order` sets where it's listed.
 - Find what to change with the developer tools. Turn them on with `defaults write com.diapatches devTools -bool YES`, relaunch Dia, and use **Help → DiaPatches: Copy View Tree** for the front window's views with their classes, frames and accessibility labels.
@@ -29,11 +29,11 @@ With the developer tools on, a script can also drive Dia: post the distributed n
 
 ## Documenting a patch
 
-Every tweak has a page on the [wiki](https://github.com/JaceThings/DiaTweaks/wiki), titled as it is in Settings. For a new patch, fill in [`docs/tweak-page.md`](docs/tweak-page.md) in your PR description with before and after screenshots: PNG, at most 1400 pixels wide, cropped to the part of Dia the tweak changes, with none of your own tabs in them. A maintainer puts it on the wiki and links it from the sidebar before merging.
+Every tweak has a page on the [wiki](https://github.com/JaceThings/DiaTweaks/wiki), titled as it is in Settings, and a preview video on its Settings page. You don't make either: a maintainer records the preview and writes the page, from [`docs/tweak-page.md`](docs/tweak-page.md), before merging. So a new tweak needs a change you can see in Dia: one recording of it becomes both the preview and the picture on its page.
 
-Its page in Settings shows a preview from the wiki repo: `previews/<key>.mp4`, or `previews/<key>.png`, 16:10. Push it to `https://github.com/JaceThings/DiaTweaks.wiki.git` and Dia shows it the next time the page opens, with no new build.
+The preview comes from the wiki repo's `previews` folder, 16:10: `vertical-<key>.mp4` recorded with tabs in the sidebar, `horizontal-<key>.mp4` with tabs at the top, or a `.png` of either. Settings shows the one matching Dia's layout and falls back to the other, so one is enough unless the tweak looks different in each. Encode videos at 1120×700 and 60 fps: `ffmpeg -i in.mp4 -an -vf fps=60,scale=1120:700 -c:v libx264 -preset veryslow -crf 26 -pix_fmt yuv420p -movflags +faststart vertical-<key>.mp4`.
 
-CI fails if a patch has no wiki page or the sidebar doesn't link to it. Run `scripts/check-tweak-docs` after `make` to check.
+CI fails if a patch has no wiki page or the sidebar doesn't link to it, so a new tweak's PR stays red until its page is up. Run `scripts/check-tweak-docs` after `make` to check.
 
 ## Testing
 

@@ -5,12 +5,12 @@ Keep the sentences short. Delete the sections that don't apply, and these commen
 
 One or two sentences on what it does.
 
-<!-- Screenshots: PNG, at most 1400 pixels wide, cropped to the part of Dia the tweak changes, with none of your own tabs in them.
-     Drag the before and after shots into the wiki editor in place of each placeholder below. -->
+<!-- The Settings preview, as an animated WebP pushed next to it in previews/:
+     ffmpeg -i vertical-key.mp4 -vf fps=30,scale=800:500 frames/%04d.png
+     img2webp -lossy -q 75 -m 6 -d 33 -mixed frames/*.png -o vertical-key.webp
+     If the tweak looks different in each layout, put the vertical and horizontal ones side by side. -->
 
-| Before | After |
-|:---:|:---:|
-| _Screenshot coming soon._ | _Screenshot coming soon._ |
+![Title, as in Settings](https://raw.githubusercontent.com/wiki/JaceThings/DiaTweaks/previews/vertical-key.webp)
 
 ## Turn it on
 

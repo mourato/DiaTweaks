@@ -6,7 +6,7 @@ static NSString *DPVerifyRevealToolbar(DPPatch *patch) {
     for (NSView *pane in DPFindViews(DPDiaContentPane)) {
         DPToolbarHover *hover = [DPToolbarHover forPane:pane];
         NSView *bar = DPSubview(pane, DPDiaToolbar);
-        BOOL watching = patch->on && DPHideToolbar.on && bar && !bar.hiddenOrHasHiddenAncestor;
+        BOOL watching = patch->on && DPHideToolbar.on && !hover.inPlace && bar && !bar.hiddenOrHasHiddenAncestor;
         if ((hover.tracking != nil) != watching) return watching ? @"nothing watches the top of the page" : @"still watching the top of the page";
         if (watching && !hover.revealed && bar.alphaValue > 0.01) return @"toolbar shows while the pointer is away";
     }

@@ -44,6 +44,15 @@ NSView *DPRow(NSView *leading, NSView *trailing) {
     return row;
 }
 
+static NSSwitch *DPSwitchIn(NSView *view) {
+    if ([view isKindOfClass:NSSwitch.class]) return (NSSwitch *)view;
+    for (NSView *subview in view.subviews) {
+        NSSwitch *found = DPSwitchIn(subview);
+        if (found) return found;
+    }
+    return nil;
+}
+
 @interface DPLinkRowView : NSView
 @property (nonatomic, copy) void (^open)(void);
 @end
@@ -56,7 +65,13 @@ NSView *DPRow(NSView *leading, NSView *trailing) {
 }
 - (void)mouseDown:(NSEvent *)event {}
 - (void)mouseUp:(NSEvent *)event {
-    if (NSPointInRect([self convertPoint:event.locationInWindow fromView:nil], self.bounds)) self.open();
+    NSPoint point = [self convertPoint:event.locationInWindow fromView:nil];
+    if (!NSPointInRect(point, self.bounds)) return;
+    NSSwitch *toggle = DPSwitchIn(self);
+    NSRect frame = [self convertRect:toggle.bounds fromView:toggle];
+    if (toggle.enabled && NSPointInRect(point, frame)) return;  // The switch flipped itself, then passed the click on.
+    if (toggle.enabled && NSPointInRect(point, NSInsetRect(frame, -10, -10))) [toggle performClick:nil];
+    else self.open();
 }
 - (BOOL)accessibilityPerformPress {
     self.open();
@@ -94,6 +109,8 @@ void DPFillStack(NSStackView *stack, NSArray<NSView *> *views) {
     for (NSView *view in views) {
         [stack addArrangedSubview:view];
         [view.widthAnchor constraintEqualToAnchor:stack.widthAnchor].active = YES;
+        // Room after each group, so a section's title sits with the rows under it.
+        if ([view isMemberOfClass:DPFillView.class]) [stack setCustomSpacing:20 afterView:view];
     }
 }
 

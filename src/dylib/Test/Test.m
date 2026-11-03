@@ -9,7 +9,7 @@ static void DPWriteReport(NSArray<NSDictionary *> *results, NSString *path) {
     NSDictionary *info = NSBundle.mainBundle.infoDictionary;
     NSDictionary *report = @{
         @"dia": [NSString stringWithFormat:@"%@ (%@)", info[@"CFBundleShortVersionString"], info[@"CFBundleVersion"]],
-        @"layout": DPFindViews(DPDiaSidebarFooter).count ? @"sidebar" : @"top",
+        @"layout": DPTabLayout(),
         @"safeMode": @(DPSafeMode),
         @"unavailable": unavailable,
         @"scenarios": results,

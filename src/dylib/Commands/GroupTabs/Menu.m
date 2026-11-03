@@ -9,10 +9,13 @@ static BOOL DPIsNewGroupTitle(NSString *title) {
     return [title hasPrefix:@"New Group with "] && ([title hasSuffix:@" Tab"] || [title hasSuffix:@" Tabs"]);
 }
 
+extern DPPatch DPGroupTabs;
+
 static NSMenuItem *DPGroupMenuItem(void) {
     NSMenuItem *item = DPMenuItem(DPGroupMenuTitle, ^{ DPGroupTabsOnce(); });
     item.tag = DPGroupMenuTag;
     item.image = [NSImage imageWithSystemSymbolName:@"rectangle.3.group" accessibilityDescription:nil];
+    item.hidden = !DPGroupTabs.on;
     return item;
 }
 
@@ -92,3 +95,21 @@ void DPInstallGroupMenus(void) {
     DPHookClass(NSMenu.class, @selector(insertItem:atIndex:), (IMP)DPMenu_insertItem);
     DPOnLaunch(^{ DPInstallMenuBarItem(); });
 }
+
+// Tab context menus are built each time they open, so only the Tabs menu keeps an item to hide.
+static void DPApplyGroupTabs(DPPatch *patch) {
+    for (NSMenuItem *top in NSApp.mainMenu.itemArray) [top.submenu itemWithTag:DPGroupMenuTag].hidden = !patch->on;
+}
+
+DP_PATCH(DPGroupTabs) {
+    .key = @"groupTabsByDomain",
+    .order = 200,
+    .defaultOn = YES,
+    .title = @"Group Tabs by Domain",
+    .detail = @"Adds Group Tabs by Domain to the tab right-click menu and the Tabs menu. It groups a window’s tabs by site each time you choose it.",
+    .symbol = @"rectangle.3.group",
+    .tint = @"systemGreenColor",
+    .section = @"Commands",
+    .install = DPInstallGroupTabs,
+    .apply = DPApplyGroupTabs,
+};

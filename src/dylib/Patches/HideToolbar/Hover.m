@@ -3,6 +3,18 @@
 static const CGFloat DPToolbarHoverHeight = 8;
 static char DPHoverKey;
 
+// Eases from `from` to `to` over a quarter second, calling `step` on each frame.
+static NSTimer *DPEase(CGFloat from, CGFloat to, void (^step)(CGFloat value, BOOL done)) {
+    CFTimeInterval start = CACurrentMediaTime();
+    NSTimer *timer = [NSTimer timerWithTimeInterval:1.0 / 120 repeats:YES block:^(NSTimer *timer) {
+        CGFloat t = MIN(1, (CACurrentMediaTime() - start) / 0.25);
+        if (t == 1) [timer invalidate];
+        step(from + (to - from) * t * t * (3 - 2 * t), t == 1);
+    }];
+    [NSRunLoop.mainRunLoop addTimer:timer forMode:NSRunLoopCommonModes];
+    return timer;
+}
+
 @implementation DPToolbarHover
 
 + (DPToolbarHover *)forPane:(NSView *)pane {
@@ -29,6 +41,7 @@ static char DPHoverKey;
 - (void)dealloc {
     [_animation invalidate];
     [_hideTimer invalidate];
+    [_inPlaceAnimation invalidate];
     if (_tracking) [_pane removeTrackingArea:_tracking];
     [NSNotificationCenter.defaultCenter removeObserver:self];
 }
@@ -65,22 +78,32 @@ static char DPHoverKey;
     if (_revealed == revealed) return;
     _revealed = revealed;
     [self.animation invalidate];
-    CGFloat from = self.progress, target = revealed;
-    CFTimeInterval start = CACurrentMediaTime();
     __weak DPToolbarHover *weakSelf = self;
-    self.animation = [NSTimer timerWithTimeInterval:1.0 / 120 repeats:YES block:^(NSTimer *timer) {
+    self.animation = DPEase(self.progress, revealed, ^(CGFloat value, BOOL done) {
         DPToolbarHover *me = weakSelf;
-        if (!me.pane) return [timer invalidate];
-        CGFloat t = MIN(1, (CACurrentMediaTime() - start) / 0.25);
-        me.progress = from + (target - from) * t * t * (3 - 2 * t);
-        DPApplyToolbar(me.pane);
-        if (t == 1) {
-            [timer invalidate];
-            me.animation = nil;
-        }
-    }];
-    [NSRunLoop.mainRunLoop addTimer:self.animation forMode:NSRunLoopCommonModes];
+        if (!me.pane) return;
+        me.progress = value;
+        DPApplyToolbarOpacity(me);
+        if (!done) return;
+        me.animation = nil;
+        DPApplyToolbar(me.pane);  // Settle stacking once, after the fade.
+    });
     DPApplyToolbar(self.pane);
+}
+
+// Unlike a hover reveal, this brings the toolbar back into its place, so the page moves down with each frame.
+- (void)setInPlace:(BOOL)inPlace {
+    if (_inPlace == inPlace) return;
+    _inPlace = inPlace;
+    [self.inPlaceAnimation invalidate];
+    __weak DPToolbarHover *weakSelf = self;
+    self.inPlaceAnimation = DPEase(self.inPlaceProgress, inPlace, ^(CGFloat value, BOOL done) {
+        DPToolbarHover *me = weakSelf;
+        if (!me.pane) return;
+        me.inPlaceProgress = value;
+        if (done) me.inPlaceAnimation = nil;
+        DPApplyToolbar(me.pane);
+    });
 }
 
 - (void)mouseEntered:(NSEvent *)event {
@@ -107,8 +130,10 @@ static char DPHoverKey;
 - (void)updateForBar:(NSView *)bar bookmarks:(NSView *)bookmarks {
     self.bar = bar;
     self.bookmarks = bookmarks;
+    self.inPlace = DPKeptInPlace(self.pane);
     NSRect rect = NSZeroRect;
-    if (DPHideToolbar.on && DPRevealToolbarOnHover.on && !bar.hiddenOrHasHiddenAncestor) {
+    // Nothing to reveal while the toolbar is already in its place.
+    if (DPHideToolbar.on && DPRevealToolbarOnHover.on && !self.inPlace && !bar.hiddenOrHasHiddenAncestor) {
         rect = DPLaidOutFrame(bar);
         if (bookmarks) rect = NSUnionRect(rect, DPLaidOutFrame(bookmarks));
         rect = NSIntersectionRect(rect, self.pane.bounds);

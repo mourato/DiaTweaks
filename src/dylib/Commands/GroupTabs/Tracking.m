@@ -61,17 +61,13 @@ static void DPBrowser_takeOwnership(id self, SEL _cmd, id contents) {
 }
 
 id DPCommandBrowser(void) {
-    NSWindow *key = NSApp.keyWindow;
-    id only = nil;
-    NSUInteger ready = 0;
-    for (id browser in DPBrowsers.allObjects) {
-        if (![[DPDelegateByBrowser objectForKey:browser] respondsToSelector:@selector(browser:getAllTabGroupsWithCompletion:)]) continue;
-        ready++;
-        only = browser;
-        NSWindow *window = [DPWindowByBrowser objectForKey:browser];
-        if (window && key && window == key) return browser;
-    }
-    return ready == 1 ? only : nil;
+    NSMutableArray *ready = [NSMutableArray new];
+    for (id browser in DPBrowsers.allObjects)
+        if ([[DPDelegateByBrowser objectForKey:browser] respondsToSelector:@selector(browser:getAllTabGroupsWithCompletion:)]) [ready addObject:browser];
+    for (NSWindow *window in NSApp.orderedWindows)
+        for (id browser in ready)
+            if ([DPWindowByBrowser objectForKey:browser] == window) return browser;
+    return ready.count == 1 ? ready[0] : nil;
 }
 
 id DPGroupingDelegate(id browser) {

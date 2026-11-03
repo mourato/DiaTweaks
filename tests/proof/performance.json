@@ -1,0 +1,204 @@
+{
+  "baseline": "9d5a57061996840a9c7686bee756be09b317e441",
+  "iterations": 10000,
+  "runs": {
+    "before": [
+      {
+        "steady_layout": {
+          "ms": 41.583,
+          "frame_writes": 20000,
+          "alpha_writes": 10000
+        },
+        "hover_ticks": {
+          "ms": 33.863,
+          "frame_writes": 20000,
+          "alpha_writes": 10000
+        }
+      },
+      {
+        "steady_layout": {
+          "ms": 17.818,
+          "frame_writes": 20000,
+          "alpha_writes": 10000
+        },
+        "hover_ticks": {
+          "ms": 19.168,
+          "frame_writes": 20000,
+          "alpha_writes": 10000
+        }
+      },
+      {
+        "steady_layout": {
+          "ms": 17.339,
+          "frame_writes": 20000,
+          "alpha_writes": 10000
+        },
+        "hover_ticks": {
+          "ms": 18.784,
+          "frame_writes": 20000,
+          "alpha_writes": 10000
+        }
+      },
+      {
+        "steady_layout": {
+          "ms": 17.37,
+          "frame_writes": 20000,
+          "alpha_writes": 10000
+        },
+        "hover_ticks": {
+          "ms": 21.075,
+          "frame_writes": 20000,
+          "alpha_writes": 10000
+        }
+      },
+      {
+        "steady_layout": {
+          "ms": 19.0,
+          "frame_writes": 20000,
+          "alpha_writes": 10000
+        },
+        "hover_ticks": {
+          "ms": 20.12,
+          "frame_writes": 20000,
+          "alpha_writes": 10000
+        }
+      },
+      {
+        "steady_layout": {
+          "ms": 19.536,
+          "frame_writes": 20000,
+          "alpha_writes": 10000
+        },
+        "hover_ticks": {
+          "ms": 20.394,
+          "frame_writes": 20000,
+          "alpha_writes": 10000
+        }
+      },
+      {
+        "steady_layout": {
+          "ms": 17.584,
+          "frame_writes": 20000,
+          "alpha_writes": 10000
+        },
+        "hover_ticks": {
+          "ms": 19.18,
+          "frame_writes": 20000,
+          "alpha_writes": 10000
+        }
+      }
+    ],
+    "after": [
+      {
+        "steady_layout": {
+          "ms": 19.183,
+          "frame_writes": 20000,
+          "alpha_writes": 0
+        },
+        "hover_ticks": {
+          "ms": 2.526,
+          "frame_writes": 0,
+          "alpha_writes": 9999
+        }
+      },
+      {
+        "steady_layout": {
+          "ms": 18.785,
+          "frame_writes": 20000,
+          "alpha_writes": 0
+        },
+        "hover_ticks": {
+          "ms": 2.583,
+          "frame_writes": 0,
+          "alpha_writes": 9999
+        }
+      },
+      {
+        "steady_layout": {
+          "ms": 18.007,
+          "frame_writes": 20000,
+          "alpha_writes": 0
+        },
+        "hover_ticks": {
+          "ms": 2.795,
+          "frame_writes": 0,
+          "alpha_writes": 9999
+        }
+      },
+      {
+        "steady_layout": {
+          "ms": 17.841,
+          "frame_writes": 20000,
+          "alpha_writes": 0
+        },
+        "hover_ticks": {
+          "ms": 2.67,
+          "frame_writes": 0,
+          "alpha_writes": 9999
+        }
+      },
+      {
+        "steady_layout": {
+          "ms": 18.277,
+          "frame_writes": 20000,
+          "alpha_writes": 0
+        },
+        "hover_ticks": {
+          "ms": 2.637,
+          "frame_writes": 0,
+          "alpha_writes": 9999
+        }
+      },
+      {
+        "steady_layout": {
+          "ms": 19.159,
+          "frame_writes": 20000,
+          "alpha_writes": 0
+        },
+        "hover_ticks": {
+          "ms": 2.574,
+          "frame_writes": 0,
+          "alpha_writes": 9999
+        }
+      },
+      {
+        "steady_layout": {
+          "ms": 23.426,
+          "frame_writes": 20000,
+          "alpha_writes": 0
+        },
+        "hover_ticks": {
+          "ms": 2.963,
+          "frame_writes": 0,
+          "alpha_writes": 9999
+        }
+      }
+    ]
+  },
+  "summary": {
+    "before": {
+      "steady_layout": {
+        "median_ms": 17.818,
+        "frame_writes": 20000,
+        "alpha_writes": 10000
+      },
+      "hover_ticks": {
+        "median_ms": 20.12,
+        "frame_writes": 20000,
+        "alpha_writes": 10000
+      }
+    },
+    "after": {
+      "steady_layout": {
+        "median_ms": 18.785,
+        "frame_writes": 20000,
+        "alpha_writes": 0
+      },
+      "hover_ticks": {
+        "median_ms": 2.637,
+        "frame_writes": 0,
+        "alpha_writes": 9999
+      }
+    }
+  }
+}

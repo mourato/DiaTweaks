@@ -147,6 +147,7 @@ static void DPSettings_handleBack(id self, SEL _cmd) {
 }
 
 void DPInstallSettings(void) {
+    DPInstallPreviews();
     DPHook(DPDiaSettingsController, @selector(handleBack), (IMP)DPSettings_handleBack);
     DPHook(DPDiaSettingsSidebar, @selector(numberOfRowsInTableView:), (IMP)DPSidebar_numberOfRows);
     DPHook(DPDiaSettingsSidebar, @selector(tableView:viewForTableColumn:row:), (IMP)DPSidebar_viewForRow);

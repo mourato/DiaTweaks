@@ -87,6 +87,13 @@ impl Manifest {
             .and_then(|key| self.index(key))
     }
 
+    pub fn hidden_by(&self, index: usize, state: &[bool]) -> Option<usize> {
+        let disabler = self.disabler(index).filter(|&disabler| state[disabler])?;
+        let option_on = (0..self.patches.len())
+            .any(|option| state[option] && self.requirement(option) == Some(disabler));
+        (!option_on).then_some(disabler)
+    }
+
     pub fn title(&self, index: usize) -> &str {
         &self.patches[index].title
     }

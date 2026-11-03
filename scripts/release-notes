@@ -22,7 +22,8 @@ for key in $(keys "$tag"); do
     patch=$(git grep -h -A8 "\.key = @\"$key\"" "$tag" -- src/dylib/Patches)
     title=$(printf '%s\n' "$patch" | sed -n 's/.*\.title = @"\(.*\)",/\1/p' | head -1)
     detail=$(printf '%s\n' "$patch" | sed -n 's/.*\.detail = @"\(.*\)",/\1/p' | head -1)
-    tweaks="$tweaks- **$title**: $detail [More](https://github.com/$repo/wiki/$(printf '%s' "$title" | tr ' ' -))
+    tweaks="$tweaks- **[$title](https://github.com/$repo/wiki/$(printf '%s' "$title" | tr ' ' -))**\\
+  $detail
 "
     skip="$skip $(git log --format=%H -G"\.key = @\"$key\"" "$range")"
 done

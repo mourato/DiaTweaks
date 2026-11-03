@@ -1,0 +1,13 @@
+{
+  "manifest_version": 3,
+  "name": "DiaTweaks Passkeys",
+  "description": "Signs in with passkeys saved in Apple Passwords.",
+  "version": "1",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAwO7EAnkg6VsDdMTuna9ER+7ZTTDV5hqfq0E5xm5Op2RffvPhbogaxWA1htBs9/i6ruotJy0+XrTPAwa8AX3z0zrSdeSD7nTkwy7CmWomvJLr/c3E0i5RwVjmu/G/unWHzmOL8fK65sNUYaz/2Vjovj+9T2DeYtNciE8tAblAtp4HlEGL3AJecekdKxg77ymWL9fJYNB7GUOn5KBAH8j7mcZnkhf2cLx0eLTh9xeiNaaz64W34mC1HkiLIFMeTfe4FGPpDrs5QUqRuLIFEUZyl7NJgV6K+aTLPQGp4h2D4/eQb2e2DXUfi//VfR3yaUetpI/AD7fuTrpYU3LnkZXIdwIDAQAB",
+  "permissions": ["nativeMessaging"],
+  "background": { "service_worker": "worker.js" },
+  "content_scripts": [
+    { "matches": ["https://*/*"], "js": ["page.js"], "world": "MAIN", "run_at": "document_start", "all_frames": true },
+    { "matches": ["https://*/*"], "js": ["bridge.js"], "run_at": "document_start", "all_frames": true }
+  ]
+}

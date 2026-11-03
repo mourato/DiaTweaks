@@ -115,10 +115,7 @@ fn hint(manifest: &Manifest, current: &[bool], index: usize) -> String {
     if let Some(required) = manifest.requirement(index) {
         hint.push_str(&format!(" Needs {}.", manifest.title(required)));
     }
-    if let Some(disabler) = manifest
-        .disabler(index)
-        .filter(|&disabler| current[disabler])
-    {
+    if let Some(disabler) = manifest.hidden_by(index, current) {
         hint.push_str(&format!(
             " No difference while {} is on.",
             manifest.title(disabler)
@@ -172,8 +169,8 @@ fn notes(manifest: &Manifest, current: &[bool], wanted: &[bool]) -> Vec<String> 
                 ));
             }
         }
-        if let Some(disabler) = manifest.disabler(index) {
-            if changed(index) && wanted[disabler] {
+        if let Some(disabler) = manifest.hidden_by(index, wanted) {
+            if changed(index) {
                 notes.push(format!(
                     "{} makes no difference while {} is on.",
                     manifest.title(index),

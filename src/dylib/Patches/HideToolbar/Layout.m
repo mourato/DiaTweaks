@@ -1,5 +1,6 @@
 #import "HideToolbar.h"
 #import "Patches/Peek/Peek.h"
+#import "Patches/EdgeToEdge/EdgeToEdge.h"
 
 NSHashTable<NSView *> *DPPanes;
 static char DPFrameKey, DPFillsKey;
@@ -23,6 +24,48 @@ NSView *DPBookmarksUnder(NSView *pane, NSView *bar) {
     return nil;
 }
 
+// Docking the sidebar moves the window's content container, with every pane in it, to the sidebar's right. A sidebar
+// that only floats over the page while the pointer is at the window's edge leaves it in place.
+static BOOL DPSidebarDocked(NSView *pane) {
+    for (NSView *view = pane.superview; view; view = view.superview)
+        if (DPIsKind(view, DPDiaContentContainer)) return DPBesideSidebar(view);
+    return NO;
+}
+
+// Dia puts its new tab page in the pane, inside a view that handles swipes.
+static BOOL DPShowsNewTab(NSView *pane) {
+    for (NSView *sub in pane.subviews)
+        for (NSView *page in sub.subviews)
+            if (DPIsKind(page, DPDiaNewTabPage) && !page.hiddenOrHasHiddenAncestor) return YES;
+    return NO;
+}
+
+BOOL DPKeptInPlace(NSView *pane) {
+    return (DPShowToolbarWithSidebar.on && DPSidebarDocked(pane)) || (DPShowToolbarOnNewTab.on && DPShowsNewTab(pane));
+}
+
+NSString *DPVerifyKeptInPlace(DPPatch *patch) {
+    for (NSView *pane in DPFindViews(DPDiaContentPane)) {
+        DPToolbarHover *hover = [DPToolbarHover forPane:pane];
+        NSView *bar = DPSubview(pane, DPDiaToolbar);
+        if (!DPHideToolbar.on || !bar || bar.hiddenOrHasHiddenAncestor || hover.revealed) continue;
+        BOOL kept = DPKeptInPlace(pane);
+        if (kept && bar.alphaValue < 0.99) return @"toolbar stays hidden where an option keeps it";
+        if (!kept && bar.alphaValue > 0.01) return @"toolbar shows where nothing keeps it";
+    }
+    return nil;
+}
+
+// How hidden the toolbar is in its place, which an option can bring it back to.
+static CGFloat DPHidden(DPToolbarHover *hover) { return DPHideToolbar.progress * (1 - hover.inPlaceProgress); }
+
+// Hover animation changes opacity only; it never changes the page's reserved space.
+void DPApplyToolbarOpacity(DPToolbarHover *hover) {
+    CGFloat alpha = DPInPeek(hover.pane) ? 0 : 1 - DPHidden(hover) * (1 - hover.progress);
+    if (hover.bar && hover.bar.alphaValue != alpha) hover.bar.alphaValue = alpha;
+    if (hover.bookmarks && hover.bookmarks.alphaValue != alpha) hover.bookmarks.alphaValue = alpha;
+}
+
 // Fades the bars out by `progress` and slides everything stacked under them up into their place.
 void DPApplyToolbar(NSView *pane) {
     NSView *bar = DPSubview(pane, DPDiaToolbar);
@@ -33,7 +76,7 @@ void DPApplyToolbar(NSView *pane) {
     DPToolbarHover *hover = [DPToolbarHover attachToPane:pane];
     [hover updateForBar:bar bookmarks:bookmarks];
 
-    CGFloat progress = DPHideToolbar.progress;
+    CGFloat progress = DPHidden(hover);
     // In a Peek the bars are invisible and the page moves up until the Peek's header is all that's above it.
     BOOL peek = DPInPeek(pane);
     if (peek) {
@@ -41,8 +84,10 @@ void DPApplyToolbar(NSView *pane) {
         CGFloat above = NSHeight(pane.window.frame) - NSMinY([last convertRect:last.bounds toView:nil]);
         CGFloat height = DPBottom(pane, last.frame) - DPTop(pane, bar.frame);
         progress = MIN(1, MAX(0, (above - DPPeekHeaderHeight) / MAX(height, 1)));
+        for (NSView *view in bars) view.alphaValue = 0;
+    } else {
+        DPApplyToolbarOpacity(hover);
     }
-    for (NSView *view in bars) view.alphaValue = peek ? 0 : 1 - progress * (1 - hover.progress);
     NSIndexSet *slots = [pane.subviews indexesOfObjectsPassingTest:^BOOL(NSView *sub, NSUInteger i, BOOL *stop) { return [bars containsObject:sub]; }];
     BOOL onTop = slots.firstIndex == pane.subviews.count - bars.count, atBottom = slots.lastIndex == bars.count - 1;
     // Revealed on hover, the bars float over the page instead of pushing it down.

@@ -29,6 +29,7 @@ static void DPCopyViewTree(void) {
 
 // Lets a script toggle patches and read the result without touching the screen:
 //     com.diapatches.dev.set, object "hideToolbar=1"   toggles a patch the way its switch does.
+//                             object "windowMaterialChoice=glass.1"   picks a patch's choice the way its menu does.
 //     com.diapatches.dev.dump                          writes every window's view tree to views.txt beside the dylib.
 static void DPListenForScripts(void) {
     NSDistributedNotificationCenter *center = NSDistributedNotificationCenter.defaultCenter;
@@ -36,6 +37,8 @@ static void DPListenForScripts(void) {
         NSArray<NSString *> *parts = [note.object componentsSeparatedByString:@"="];
         DPPatch *patch = parts.count == 2 ? DPPatchNamed(parts[0]) : NULL;
         if (patch) DPSetPatch(patch, parts[1].boolValue, YES);
+        for (NSUInteger i = 0; parts.count == 2 && i < DPPatchCount; i++)
+            if ([DPPatches[i]->choice isEqualToString:parts[0]]) DPSetChoice(DPPatches[i], parts[1]);
     }];
     [center addObserverForName:@"com.diapatches.dev.dump" object:nil queue:NSOperationQueue.mainQueue usingBlock:^(NSNotification *_) {
         NSMutableString *out = [NSMutableString new];

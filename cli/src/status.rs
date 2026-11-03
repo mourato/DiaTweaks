@@ -74,7 +74,7 @@ fn report(env: &Env, spinner: &Spinner) -> Result<Vec<String>> {
                 manifest.title(required)
             ));
         }
-        if let Some(disabler) = manifest.disabler(index).filter(|&disabler| state[disabler]) {
+        if let Some(disabler) = manifest.hidden_by(index, &state) {
             line.push_str(&format!(
                 " (no difference while {} is on)",
                 manifest.title(disabler)

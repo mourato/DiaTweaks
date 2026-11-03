@@ -1,7 +1,7 @@
 // Dia restyles the page's layers after its own layout and when Chat opens, so the patches restyle after it.
 #import "EdgeToEdge.h"
 
-static char DPChatKey;
+static char DPChatKey, DPPendingRestyleKey, DPCheckChatKey;
 
 void DPRestyleContainer(NSView *container) {
     DPApplySquareCorners(container);
@@ -12,10 +12,32 @@ void DPRestyleContainer(NSView *container) {
     if (requested && !NSEqualRects(container.frame, requested.rectValue)) container.frame = requested.rectValue;
 }
 
+// Layout, layer updates and shadow layout often happen together. Preserve the immediate
+// restyle, but share their deferred follow-up instead of queuing a full traversal for each.
+static void DPQueueRestyle(NSView *container, BOOL checkChat) {
+    if (checkChat) DPSet(container, &DPCheckChatKey, @YES);
+    if ([DPGet(container, &DPPendingRestyleKey) boolValue]) return;
+    DPSet(container, &DPPendingRestyleKey, @YES);
+    dispatch_async(dispatch_get_main_queue(), ^{
+        BOOL check = [DPGet(container, &DPCheckChatKey) boolValue];
+        DPSet(container, &DPPendingRestyleKey, nil);
+        DPSet(container, &DPCheckChatKey, nil);
+        if (check) {
+            BOOL chat = DPChatCard(container) != nil;
+            if ([DPGet(container, &DPChatKey) boolValue] != chat) {
+                DPSet(container, &DPChatKey, @(chat));
+                NSValue *requested = DPRequestedFrame(container);
+                if (requested) container.frame = requested.rectValue;
+            }
+        }
+        DPRestyleContainer(container);
+    });
+}
+
 static void DPContainer_layoutOrUpdateLayer(NSView *self, SEL _cmd) {
     DPCallOriginal(DPContainer_layoutOrUpdateLayer, self);
     DPRestyleContainer(self);
-    dispatch_async(dispatch_get_main_queue(), ^{ DPRestyleContainer(self); });
+    DPQueueRestyle(self, NO);
 }
 
 // Opening or closing Chat reshapes the content without resizing the container.
@@ -23,16 +45,7 @@ static void DPShadow_layout(NSView *self, SEL _cmd) {
     DPCallOriginal(DPShadow_layout, self);
     NSView *container = self;
     while (container && !DPIsKind(container, DPDiaContentContainer)) container = container.superview;
-    if (!container) return;
-    dispatch_async(dispatch_get_main_queue(), ^{
-        BOOL chat = DPChatCard(container) != nil;
-        if ([DPGet(container, &DPChatKey) boolValue] != chat) {
-            DPSet(container, &DPChatKey, @(chat));
-            NSValue *requested = DPRequestedFrame(container);
-            if (requested) container.frame = requested.rectValue;
-        }
-        DPRestyleContainer(container);
-    });
+    if (container) DPQueueRestyle(container, YES);
 }
 
 void DPInstallRestyle(void) {

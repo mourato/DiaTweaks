@@ -9,7 +9,7 @@ DP_PATCH(DPHideChatButton) {
     .detail = @"Hide the Chat button at the top right of the toolbar.",
     .symbol = @"bubble.fill",
     .tint = @"systemPurpleColor",
-    .section = @"Toolbar",
+    .section = @"Toolbar Items",
     .classes = DPClasses(DPDiaToolbar),
     .disabledBy = @"hideToolbar",
     .hides = DPIsChatButton,
